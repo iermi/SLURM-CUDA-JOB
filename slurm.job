@@ -1,0 +1,78 @@
+#!/bin/bash
+#SBATCH --job-name=asus1
+#SBATCH --output=asus1.out
+#SBATCH --error=asus1.err
+#SBATCH --cpus-per-task=1
+#SBATCH --ntasks=10
+#SBATCH --nodelist=asus1
+#SBATCH --nodes=1
+#SBATCH --time=03:00:00
+#SBATCH --partition=asus1
+
+echo "Running on $(hostname):"
+nvidia-smi
+
+set -euo pipefail
+
+# Directory from which the job was submitted
+SUBMIT_DIR="${SLURM_SUBMIT_DIR}"
+
+# Local temporary storage
+SCRATCH_BASE="/temp"
+
+# Job-specific working directory
+WORKDIR="${SCRATCH_BASE}/${SLURM_JOB_ID}"
+
+# Directory where results will be stored after completion
+RESULT_DIR="${SUBMIT_DIR}/${SLURM_JOB_ID}"
+
+cleanup() {
+    echo "=== Cleanup started ==="
+
+    # Copy back whatever exists, even if the job failed
+    if [ -d "${WORKDIR}" ]; then
+        mkdir -p "${RESULT_DIR}"
+
+        echo "Copying results back to ${RESULT_DIR}"
+        cp -r "${WORKDIR}/." "${RESULT_DIR}/" || true
+
+        echo "Removing scratch directory ${WORKDIR}"
+        rm -rf "${WORKDIR}"
+    fi
+
+    echo "=== Cleanup finished ==="
+}
+
+# Run cleanup on normal exit, error, or cancellation
+trap cleanup EXIT
+
+echo "Job ID: ${SLURM_JOB_ID}"
+echo "Submit directory: ${SUBMIT_DIR}"
+echo "Scratch directory: ${WORKDIR}"
+
+# Create scratch directory
+mkdir -p "${WORKDIR}"
+
+# Copy all files from the submission directory
+echo "Copying input files to scratch..."
+cp -r "${SUBMIT_DIR}/." "${WORKDIR}/"
+
+# Move to scratch directory
+cd "${WORKDIR}"
+
+echo "Starting calculation in $(pwd)"
+
+#########################################################
+# PUT YOUR CALCULATION COMMAND(S) BELOW
+#########################################################
+
+# Compile
+/usr/local/cuda/bin/nvcc -O3 -std=c++17 mult_cuda.cu -lcublas -o mult_cuda
+
+# Run
+./mult_cuda
+
+#########################################################
+
+echo "Calculation finished."
+
